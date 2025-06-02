@@ -113,7 +113,7 @@ public class Building : IBuilding
             return;
         }
 
-        IFloor? callingFloor = _floors.FirstOrDefault(f => f.FloorNumber == floorNumber);
+        IFloor? callingFloor = _floors!.FirstOrDefault(f => f.FloorNumber == floorNumber);
         if (callingFloor == null)
         {
             _logger.LogWarning($"RequestElevator: Requested floor {floorNumber} does not exist.");
@@ -265,19 +265,24 @@ public class Building : IBuilding
         }
 
         _logger.LogInformation("--- Building Step Simulation Tick ---");
+        Console.WriteLine("--- Building Step Simulation Tick ---");
 
         _logger.LogDebug("Phase 1: Updating all elevator states and actions.");
         foreach (IElevator elevator in _elevators)
         {
             _logger.LogTrace($"Stepping Elevator{elevator.Id} (Currently at Floor {elevator.CurrentFloor}, State: {elevator.State}, Dir: {elevator.CurrentDirection})");
+            Console.WriteLine($"Stepping Elevator{elevator.Id} (Currently at Floor {elevator.CurrentFloor}, State: {elevator.State}, Dir: {elevator.CurrentDirection})");
             elevator.Step();
-            _logger.LogTrace($"After Step, Elevator Elevator{elevator.Id} is now at Floor {elevator.CurrentFloor}, State: {elevator.State}, Dir: {elevator.CurrentDirection}");
+            _logger.LogTrace($"After Step, Elevator{elevator.Id} is now at Floor {elevator.CurrentFloor}, State: {elevator.State}, Dir: {elevator.CurrentDirection}");
+            Console.WriteLine($"After Step, Elevator{elevator.Id} is now at Floor {elevator.CurrentFloor}, State: {elevator.State}, Dir: {elevator.CurrentDirection}");
         }
 
         if (!_floors?.Any() ?? true)
         {
             _logger.LogDebug("Phase 2: Skipping passenger loading as there are no floors defined.");
             _logger.LogInformation("--- Building Step Simulation Tick Complete (No loading phase) ---");
+            Console.WriteLine("Phase 2: Skipping passenger loading as there are no floors defined.");
+            Console.WriteLine("--- Building Step Simulation Tick Complete (No loading phase) ---");
             return;
         }
 
@@ -286,13 +291,14 @@ public class Building : IBuilding
         {
             if (elevatorForLoading.State == ElevatorState.DoorsOpen)
             {
-                _logger.LogDebug($"Elevator Elevator{elevatorForLoading.Id} has doors open at Floor {elevatorForLoading.CurrentFloor}. Checking for passengers to load.");
+                _logger.LogDebug($"Elevator{elevatorForLoading.Id} has doors open at Floor {elevatorForLoading.CurrentFloor}. Checking for passengers to load.");
+                Console.WriteLine($"Elevator{elevatorForLoading.Id} has doors open at Floor {elevatorForLoading.CurrentFloor}. Checking for passengers to load.");
 
-                IFloor? currentElevatorFloor = _floors.FirstOrDefault(f => f.FloorNumber == elevatorForLoading.CurrentFloor);
+                IFloor? currentElevatorFloor = _floors!.FirstOrDefault(f => f.FloorNumber == elevatorForLoading.CurrentFloor);
 
                 if (currentElevatorFloor == null)
                 {
-                    _logger.LogWarning($"StepSimulation/Loading: Elevator Elevator{elevatorForLoading.Id} is at F{elevatorForLoading.CurrentFloor}, which does not exist in building's floor list. Cannot load passengers.");
+                    _logger.LogWarning($"StepSimulation/Loading: Elevator{elevatorForLoading.Id} is at F{elevatorForLoading.CurrentFloor}, which does not exist in building's floor list. Cannot load passengers.");
                     continue;
                 }
 
@@ -311,11 +317,11 @@ public class Building : IBuilding
                         if (elevatorForLoading.AddPassenger(personToBoard))
                         {
                             boardedThisStopOnThisElevator.Add(personToBoard);
-                            _logger.LogInformation($"Elevator{elevatorForLoading.Id} boarded P{personToBoard.Id} (O:{personToBoard.OriginFloor}->D:{personToBoard.DestinationFloor}) at Floor {elevatorForLoading.CurrentFloor} going UP. Load: {elevatorForLoading.Passengers.Count}/{elevatorForLoading.MaxCapacity}");
+                            _logger.LogInformation($"Elevator{elevatorForLoading.Id} boarded Person {personToBoard.Id} (Origin Floor:{personToBoard.OriginFloor} -> Destination Floor:{personToBoard.DestinationFloor}) at Floor {elevatorForLoading.CurrentFloor} going UP. Load: {elevatorForLoading.Passengers.Count}/{elevatorForLoading.MaxCapacity}");
                         }
                         else
                         {
-                            _logger.LogWarning($"Elevator{elevatorForLoading.Id} AddPassenger failed for P{personToBoard.Id} at Floor {elevatorForLoading.CurrentFloor}. Re-queuing person.");
+                            _logger.LogWarning($"Elevator{elevatorForLoading.Id} AddPassenger failed for Person {personToBoard.Id} at Floor {elevatorForLoading.CurrentFloor}. Re-queuing person.");
                             currentElevatorFloor.AddWaitingPerson(personToBoard);
                             break;
                         }
@@ -350,6 +356,7 @@ public class Building : IBuilding
             }
         }
         _logger.LogInformation("--- Building Step Simulation Tick Complete ---");
+        Console.WriteLine("--- Building Step Simulation Tick Complete ---");
     }
 
     /// <summary>

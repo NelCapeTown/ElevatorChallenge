@@ -15,13 +15,13 @@ public class ElevatorFactoryTests
 {
     private readonly Mock<ILogger<ElevatorFactory>> _factoryLoggerMock;
     private readonly Mock<ILogger<Elevator>> _elevatorLoggerMock;
-    private readonly Mock<IConfiguration> _configurationMock;
+    private readonly Mock<IConfigurationWrapper> _configurationMock;
 
     public ElevatorFactoryTests()
     {
         _factoryLoggerMock = new Mock<ILogger<ElevatorFactory>>();
         _elevatorLoggerMock = new Mock<ILogger<Elevator>>();
-        _configurationMock = new Mock<IConfiguration>();
+        _configurationMock = new Mock<IConfigurationWrapper>();
     }
 
     [Fact]
@@ -48,9 +48,9 @@ public class ElevatorFactoryTests
     [Fact]
     public void Constructor_SetsFields_FromConfiguration()
     {
-        _configurationMock.Setup(c => c.GetValue<int>("MaxElevatorCapacity",-1)).Returns(8);
-        _configurationMock.Setup(c => c.GetValue<int>("DefaultElevatorStartingFloor",-1)).Returns(2);
-        _configurationMock.Setup(c => c.GetValue<int>("NumberOfElevators",-1)).Returns(3);
+        _configurationMock.SetupProperty(c => c.MaxElevatorCapacity, 8);
+        _configurationMock.SetupProperty(c => c.DefaultElevatorStartingFloor, 2);
+        _configurationMock.SetupProperty(c => c.NumberOfElevators, 3);
 
         var factory = new ElevatorFactory(_factoryLoggerMock.Object,_elevatorLoggerMock.Object,_configurationMock.Object);
 
@@ -98,17 +98,17 @@ public class ElevatorFactoryTests
     [Theory]
     [InlineData(0)]
     [InlineData(-2)]
-    public void SetNoOfElevators_Throws_WhenLessThanOne(int invalidCount)
+    public void SetNumberOfElevators_Throws_WhenLessThanOne(int invalidCount)
     {
         var factory = CreateDefaultFactory();
-        Should.Throw<ArgumentOutOfRangeException>(() => factory.SetNoOfElevators(invalidCount));
+        Should.Throw<ArgumentOutOfRangeException>(() => factory.SetNumberOfElevators(invalidCount));
     }
 
     [Fact]
-    public void SetNoOfElevators_SetsValue_WhenValid()
+    public void SetNumberOfElevators_SetsValue_WhenValid()
     {
         var factory = CreateDefaultFactory();
-        factory.SetNoOfElevators(2);
+        factory.SetNumberOfElevators(2);
         factory.GetNumberOfElevators().ShouldBe(2);
     }
 
@@ -126,11 +126,11 @@ public class ElevatorFactoryTests
     }
 
     [Fact]
-    public void CreateElevator_Throws_WhenDefaultStartingFloorNotSet()
+    public void CreateElevator_Throws_WhenDefaultStartingFloorNotSet_And_ParameterNegative()
     {
         var factory = CreateDefaultFactory();
         factory.SetElevatorMaxCapacity(5);
-        // Default starting floor is -1 (unset)
+        // Default starting floor is not yet set so it defaults to -1
         Should.Throw<InvalidOperationException>(() => factory.CreateElevator(-1));
     }
 
@@ -146,12 +146,13 @@ public class ElevatorFactoryTests
         elevator.MaxCapacity.ShouldBe(4);
     }
 
+
     private ElevatorFactory CreateDefaultFactory()
     {
         // Use default values for configuration
-        _configurationMock.Setup(c => c.GetValue<int>("MaxElevatorCapacity",-1)).Returns(-1);
-        _configurationMock.Setup(c => c.GetValue<int>("DefaultElevatorStartingFloor",-1)).Returns(-1);
-        _configurationMock.Setup(c => c.GetValue<int>("NumberOfElevators",-1)).Returns(-1);
+        _configurationMock.SetupProperty(c => c.MaxElevatorCapacity, -1);
+        _configurationMock.SetupProperty(c => c.DefaultElevatorStartingFloor, -1);
+        _configurationMock.SetupProperty(c => c.NumberOfElevators, -1);
 
         return new ElevatorFactory(_factoryLoggerMock.Object,_elevatorLoggerMock.Object,_configurationMock.Object);
     }

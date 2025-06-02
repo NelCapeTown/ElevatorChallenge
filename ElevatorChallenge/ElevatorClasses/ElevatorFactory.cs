@@ -9,6 +9,9 @@ using System.Threading.Tasks;
 
 namespace ElevatorChallenge.ElevatorClasses;
 
+/// <summary>
+/// Interface for creating and managing elevator instances and configurations.
+/// </summary>
 public interface IElevatorFactory
 {
     /// <summary>
@@ -51,8 +54,8 @@ public interface IElevatorFactory
     /// <summary>
     /// Sets the number of elevators for the building.
     /// </summary>
-    /// <param name="noOfElevators">The number of elevators. Must be one or greater.</param>
-    void SetNoOfElevators(int noOfElevators);
+    /// <param name="numberOfElevators">The number of elevators. Must be one or greater.</param>
+    void SetNumberOfElevators(int numberOfElevators);
 }
 
 /// <summary>
@@ -62,7 +65,7 @@ public class ElevatorFactory : IElevatorFactory
 {
     private readonly ILogger<ElevatorFactory> _logger;
     private readonly ILogger<Elevator> _elevatorLogger;
-    private readonly IConfiguration _configuration;
+    private readonly IConfigurationWrapper _configurationWrapper;
     private int _elevatorMaxCapacity;
     private int _defaultStartingFloor;
     private int _numberOfElevators;
@@ -72,7 +75,7 @@ public class ElevatorFactory : IElevatorFactory
     /// dependencies.
     /// </summary>
     /// <remarks>The constructor retrieves the following settings from the provided <paramref
-    /// name="configuration"/>: <list type="bullet"> <item> <description><c>MaxElevatorCapacity</c>: The maximum
+    /// name="configurationWrapper"/>: <list type="bullet"> <item> <description><c>MaxElevatorCapacity</c>: The maximum
     /// capacity of an elevator. Defaults to -1 if not specified, prompting the user to provide a value.</description>
     /// </item> <item> <description><c>DefaultElevatorStartingFloor</c>: The default starting floor for elevators.
     /// Defaults to -1 if not specified, prompting the user to provide a value.</description> </item> <item>
@@ -80,17 +83,17 @@ public class ElevatorFactory : IElevatorFactory
     /// prompting the user to provide a value.</description> </item> </list></remarks>
     /// <param name="logger">The logger used for logging factory-level operations. Cannot be <see langword="null"/>.</param>
     /// <param name="elevatorLogger">The logger used for logging elevator-specific operations. Cannot be <see langword="null"/>.</param>
-    /// <param name="configuration">The configuration source for retrieving elevator settings. Cannot be <see langword="null"/>.</param>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="logger"/>, <paramref name="elevatorLogger"/>, or <paramref name="configuration"/> is
+    /// <param name="configurationWrapper">The configuration source for retrieving elevator settings. Cannot be <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="logger"/>, <paramref name="elevatorLogger"/>, or <paramref name="configurationWrapper"/> is
     /// <see langword="null"/>.</exception>
-    public ElevatorFactory(ILogger<ElevatorFactory> logger,ILogger<Elevator> elevatorLogger,IConfiguration configuration)
+    public ElevatorFactory(ILogger<ElevatorFactory> logger,ILogger<Elevator> elevatorLogger,IConfigurationWrapper configurationWrapper)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger),"Logger cannot be null.");
         _elevatorLogger = elevatorLogger ?? throw new ArgumentNullException(nameof(elevatorLogger),"Elevator logger cannot be null.");
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration),"Configuration cannot be null.");
-        _elevatorMaxCapacity = _configuration.GetValue<int>("MaxElevatorCapacity",-1); // Default to -1 if not specified in which case the user will be prompted to enter a value
-        _defaultStartingFloor = _configuration.GetValue<int>("DefaultElevatorStartingFloor",-1); // Default to -1 if not specified in which case the user will be prompted to enter a value
-        _numberOfElevators = _configuration.GetValue<int>("NumberOfElevators",-1); // Default to -1 if not specified in which case the user will be prompted to enter a value
+        _configurationWrapper = configurationWrapper ?? throw new ArgumentNullException(nameof(configurationWrapper),"Configuration cannot be null.");
+        _elevatorMaxCapacity = _configurationWrapper.MaxElevatorCapacity; // Default to -1 if not specified in which case the user will be prompted to enter a value
+        _defaultStartingFloor = _configurationWrapper.DefaultElevatorStartingFloor; // Default to -1 if not specified in which case the user will be prompted to enter a value
+        _numberOfElevators = _configurationWrapper.NumberOfElevators; // Default to -1 if not specified in which case the user will be prompted to enter a value
     }
 
     /// <summary>
@@ -135,15 +138,15 @@ public class ElevatorFactory : IElevatorFactory
     /// <summary>
     /// Sets the number of elevators for the building.
     /// </summary>
-    /// <param name="noOfElevators">The number of elevators. Must be one or greater.</param>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="noOfElevators"/> is less than one.</exception>
-    public void SetNoOfElevators(int noOfElevators)
+    /// <param name="numberOfElevators">The number of elevators. Must be one or greater.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="numberOfElevators"/> is less than one.</exception>
+    public void SetNumberOfElevators(int numberOfElevators)
     {
-        if (noOfElevators < 1)
+        if (numberOfElevators < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(noOfElevators),"Number of Elevators must be one or greater.");
+            throw new ArgumentOutOfRangeException(nameof(numberOfElevators),"Number of Elevators must be one or greater.");
         }
-        _numberOfElevators = noOfElevators;
+        _numberOfElevators = numberOfElevators;
         _logger.LogInformation($"Number of Elevators set to {_numberOfElevators}");
     }
 

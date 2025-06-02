@@ -9,6 +9,9 @@ using System.Threading.Tasks;
 
 namespace ElevatorChallenge.ElevatorClasses;
 
+/// <summary>
+/// Interface for creating <see cref="Floor"/> instances and managing the number of floors in the building.
+/// </summary>
 public interface IFloorFactory
 {
     /// <summary>
@@ -42,13 +45,27 @@ public class FloorFactory : IFloorFactory
 
     private int _numberOfFloors;
 
-    public FloorFactory(ILogger<FloorFactory> logger,ILogger<Floor> floorLogger,IConfiguration configuration)
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FloorFactory"/> class.
+    /// </summary>
+    /// <param name="logger">The logger for the <see cref="FloorFactory"/> instance.</param>
+    /// <param name="floorLogger">The logger for the <see cref="Floor"/> instances.</param>
+    /// <param name="configuration">The configuration settings for the application.</param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="logger"/>, <paramref name="floorLogger"/>, or <paramref name="configuration"/> is null.
+    /// </exception>
+    public FloorFactory(ILogger<FloorFactory> logger, ILogger<Floor> floorLogger, IConfiguration configuration)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger),"Logger cannot be null.");
-        _floorLogger = floorLogger ?? throw new ArgumentNullException(nameof(floorLogger),"Floor logger cannot be null.");
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration),"Configuration cannot be null.");
-        _numberOfFloors = _configuration.GetValue<int>("NumberOfFloors",-1); // Default to -1 if not specified in which case the user will be prompted to enter a value.
-    }
+
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger), "Logger cannot be null.");
+
+        _floorLogger = floorLogger ?? throw new ArgumentNullException(nameof(floorLogger), "Floor logger cannot be null.");
+
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration), "Configuration cannot be null.");
+
+        _numberOfFloors = _configuration.GetValue<int>("NumberOfFloors", -1); // Default to -1 if not specified in which case the user will be prompted to enter a value.
+
+    }
 
     /// <summary>
     /// Sets the total number of floors for the building.

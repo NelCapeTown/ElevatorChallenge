@@ -35,12 +35,20 @@ public static class DependencyInjectionSetup
             loggingBuilder.AddSerilog(Log.Logger, dispose: true);
         });
 
+        // Register the ConfigurationWrapper to provide configuration values and helps mock configuration in tests
+        services.AddSingleton<IConfigurationWrapper, ConfigurationWrapper>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<ConfigurationWrapper>>();
+            return new ConfigurationWrapper(logger, configuration);
+        });
+
         // Register the ElevatorFactory with the required dependencies
         services.AddSingleton<IElevatorFactory, ElevatorFactory>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<ElevatorFactory>>();
             var elevatorLogger = provider.GetRequiredService<ILogger<Elevator>>();
-            return new ElevatorFactory(logger, elevatorLogger, configuration);
+            var configurationWrapper = provider.GetRequiredService<IConfigurationWrapper>();
+            return new ElevatorFactory(logger, elevatorLogger,configurationWrapper);
         });
 
         // Register the FloorFactory with the required dependencies

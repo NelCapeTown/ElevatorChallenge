@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 
 namespace ElevatorChallenge.ElevatorClasses;
 
+/// <summary>
+/// Interface for setting up the building and starting the main simulation loop.
+/// </summary>
 public interface ISimulationSetupService
 {
     /// <summary>
@@ -69,12 +72,12 @@ public class SimulationSetupService : ISimulationSetupService
             _floorFactory.SetNumberOfFloors(numFloors);
         }
 
-        int numElevators = _elevatorFactory.GetNumberOfElevators();
-        while (numElevators < 1)
+        int numberOfElevators = _elevatorFactory.GetNumberOfElevators();
+        while (numberOfElevators < 1)
         {
             _logger.LogWarning("Number of elevators is not set or invalid. Prompting user for input.");
-            numElevators = PromptForPositiveInt("Enter number of elevators: ");
-            _elevatorFactory.SetNoOfElevators(numElevators);
+            numberOfElevators = PromptForPositiveInt("Enter number of elevators: ");
+            _elevatorFactory.SetNumberOfElevators(numberOfElevators);
         }
 
         int elevatorCapacity = _elevatorFactory.GetElevatorMaxCapacity();
@@ -85,7 +88,7 @@ public class SimulationSetupService : ISimulationSetupService
             _elevatorFactory.SetElevatorMaxCapacity(elevatorCapacity);
         }
 
-        _logger.LogInformation("Building parameters: Floors={numFloors}, Elevators={numElevators}, Capacity={Capacity}",numFloors,numElevators,elevatorCapacity);
+        _logger.LogInformation("Building parameters: Floors={numFloors}, Elevators={numberOfElevators}, Capacity={Capacity}",numFloors,numberOfElevators,elevatorCapacity);
 
         var floors = new List<IFloor>();
         for (int i = 1; i <= numFloors; i++)
@@ -95,12 +98,12 @@ public class SimulationSetupService : ISimulationSetupService
         _logger.LogDebug("Created {FloorCount} floors.",floors.Count);
 
         var elevators = new List<IElevator>();
-        for (int i = 1; i <= numElevators; i++)
+        for (int i = 1; i <= numberOfElevators; i++)
         {
             // Assuming all elevators start at floor 1
             elevators.Add(_elevatorFactory.CreateElevator());
         }
-        _logger.LogDebug("Created {numElevators} elevators.",elevators.Count);
+        _logger.LogDebug("Created {numberOfElevators} elevators.",elevators.Count);
 
         _building.Initialise(elevators,floors);
 
@@ -112,6 +115,7 @@ public class SimulationSetupService : ISimulationSetupService
     /// Prompts the user to enter a positive integer, optionally accepting a default value.
     /// </summary>
     /// <param name="message">The prompt message to display to the user.</param>
+    /// <param name="allowZero">Whether to allow zero as a valid input.</param>
     /// <param name="defaultValue">The default value to use if the user enters nothing.</param>
     /// <returns>A positive integer entered by the user or the default value.</returns>
     private int PromptForPositiveInt(string message,bool allowZero = false,int? defaultValue = null)

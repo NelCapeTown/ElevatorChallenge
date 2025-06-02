@@ -5,7 +5,7 @@ using Moq;
 using Shouldly;
 using Xunit;
 
-namespace ElevatorTestProject;
+namespace ElevatorChallenge.Tests;
 
 public class ElevatorTests
 {
