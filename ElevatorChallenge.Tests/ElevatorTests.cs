@@ -63,11 +63,11 @@ public class ElevatorTests
     }
 
     [Fact]
-    public void IsIdle_WhenStopped_ReturnsTrue()
+    public void IsStopped_WhenStopped_ReturnsTrue()
     {
         var elevator = new Elevator(_loggerMock.Object, 1, 5);
 
-        elevator.IsIdle().ShouldBeTrue();
+        elevator.IsStopped().ShouldBeTrue();
     }
 
     [Fact]

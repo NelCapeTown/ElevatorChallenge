@@ -41,7 +41,7 @@ public class FloorFactory : IFloorFactory
 {
     private readonly ILogger<FloorFactory> _logger;
     private readonly ILogger<Floor> _floorLogger;
-    private readonly IConfiguration _configuration;
+    private readonly IConfigurationWrapper _configurationWrapper;
 
     private int _numberOfFloors;
 
@@ -50,20 +50,20 @@ public class FloorFactory : IFloorFactory
     /// </summary>
     /// <param name="logger">The logger for the <see cref="FloorFactory"/> instance.</param>
     /// <param name="floorLogger">The logger for the <see cref="Floor"/> instances.</param>
-    /// <param name="configuration">The configuration settings for the application.</param>
+    /// <param name="configurationWrapper">The configurationWrapper settings for the application.</param>
     /// <exception cref="ArgumentNullException">
-    /// Thrown if <paramref name="logger"/>, <paramref name="floorLogger"/>, or <paramref name="configuration"/> is null.
+    /// Thrown if <paramref name="logger"/>, <paramref name="floorLogger"/>, or <paramref name="configurationWrapper"/> is null.
     /// </exception>
-    public FloorFactory(ILogger<FloorFactory> logger, ILogger<Floor> floorLogger, IConfiguration configuration)
+    public FloorFactory(ILogger<FloorFactory> logger, ILogger<Floor> floorLogger, IConfigurationWrapper configurationWrapper)
     {
 
         _logger = logger ?? throw new ArgumentNullException(nameof(logger), "Logger cannot be null.");
 
         _floorLogger = floorLogger ?? throw new ArgumentNullException(nameof(floorLogger), "Floor logger cannot be null.");
 
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration), "Configuration cannot be null.");
+        _configurationWrapper = configurationWrapper ?? throw new ArgumentNullException(nameof(configurationWrapper), "Configuration cannot be null.");
 
-        _numberOfFloors = _configuration.GetValue<int>("NumberOfFloors", -1); // Default to -1 if not specified in which case the user will be prompted to enter a value.
+        _numberOfFloors = _configurationWrapper.NumberOfFloors; // Default to -1 if not specified in which case the user will be prompted to enter a value
 
     }
 
@@ -74,23 +74,13 @@ public class FloorFactory : IFloorFactory
     /// <exception cref="ArgumentOutOfRangeException">Thrown if <paramref name="numberOfFloors"/> is less than or equal to zero.</exception>
     public void SetNumberOfFloors(int numberOfFloors)
     {
-        try
+        if (numberOfFloors < 1)
         {
-            if (numberOfFloors <= 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(numberOfFloors),"Number of floors must be greater than zero.");
-            }
-            _numberOfFloors = numberOfFloors;
-            _logger.LogInformation($"Number of floors set to {_numberOfFloors}");
-
+            throw new ArgumentOutOfRangeException(nameof(numberOfFloors),"Number of Floors must be one or greater.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,"Error in SetNumberOfFloors.");
-            throw;
-        }
+        _numberOfFloors = numberOfFloors;
+        _logger.LogInformation($"Number of Floors set to {_numberOfFloors}");
     }
-
     /// <summary>
     /// Gets the configured number of floors for the building.
     /// </summary>

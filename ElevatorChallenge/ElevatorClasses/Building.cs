@@ -200,7 +200,7 @@ public class Building : IBuilding
             int score;
             int distanceToCallFloor = Math.Abs(elevator.CurrentFloor - callFloor);
 
-            if (elevator.IsIdle())
+            if (elevator.IsStopped())
             {
                 score = distanceToCallFloor;
             }

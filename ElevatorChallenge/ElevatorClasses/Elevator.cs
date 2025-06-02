@@ -5,18 +5,16 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ElevatorChallenge.ElevatorClasses;
 
 /// <summary>
-/// Represents an elevator interface that defines the basic operations and properties of an elevator.
+/// Represents the contract for an elevator in the building.
 /// </summary>
 public interface IElevator
 {
     /// <summary>
-    /// Gets the current direction of travel for the elevator.
+    /// Gets the current direction of the elevator.
     /// </summary>
     Direction CurrentDirection { get; }
 
@@ -31,12 +29,12 @@ public interface IElevator
     int Id { get; }
 
     /// <summary>
-    /// Gets the maximum number of people the elevator can carry at one time.
+    /// Gets the maximum number of passengers the elevator can carry.
     /// </summary>
     int MaxCapacity { get; }
 
     /// <summary>
-    /// Gets the list of people currently riding in the elevator.
+    /// Gets the list of passengers currently in the elevator.
     /// </summary>
     List<Person> Passengers { get; }
 
@@ -44,49 +42,49 @@ public interface IElevator
     /// Gets the current operational state of the elevator.
     /// </summary>
     ElevatorState State { get; }
-    
+
     /// <summary>
-    /// Keeps track of all upcoming stops for the elevator, including both passenger drop-off floors and assigned pickup floors.
+    /// Gets a read-only collection of all upcoming stops for the elevator.
     /// </summary>
     IReadOnlyCollection<int> AllUpcomingStops { get; }
 
     /// <summary>
-    /// Adds a floor to the elevator's destination list (e.g., internal button press or assigned call).
+    /// Adds a destination floor to the elevator's list of stops.
     /// </summary>
     /// <param name="floor">The floor to add as a destination.</param>
-    /// <param name="callDirection">The direction of the call, used for pickups. Defaults to Stopped.</param>
-    void AddDestination(int floor, Direction callDirection = Direction.Stopped);
+    /// <param name="callDirection">The direction of the call, if applicable.</param>
+    void AddDestination(int floor,Direction callDirection = Direction.Stopped);
 
     /// <summary>
-    /// Adds a passenger if capacity allows.
+    /// Attempts to add a passenger to the elevator.
     /// </summary>
-    /// <param name="person">The person to add as a passenger.</param>
+    /// <param name="person">The person to add.</param>
     /// <returns>True if the passenger was added; otherwise, false.</returns>
     bool AddPassenger(Person person);
 
     /// <summary>
     /// Gets the number of pickup requests at the specified floor.
     /// </summary>
-    /// <param name="floor">The floor for which to count pickup requests.</param>
-    /// <returns>The number of pickup requests at the given floor.</returns>
+    /// <param name="floor">The floor to check for pickup requests.</param>
+    /// <returns>The number of pickup requests at the floor.</returns>
     int GetPickupRequestCountAtFloor(int floor);
 
     /// <summary>
-    /// Determines whether the elevator is currently idle (not moving and not handling any requests).
+    /// Determines whether the elevator is currently stopped.
     /// </summary>
-    /// <returns>True if the elevator is idle; otherwise, false.</returns>
-    bool IsIdle();
+    /// <returns>True if the elevator is stopped; otherwise, false.</returns>
+    bool IsStopped();
 
     /// <summary>
     /// Determines whether the elevator is moving towards the specified floor in the required direction.
     /// </summary>
-    /// <param name="floor">The floor to check if the elevator is moving towards.</param>
-    /// <param name="requiredDirection">The direction in which the elevator should be moving.</param>
-    /// <returns>True if the elevator is moving in the required direction and towards the specified floor; otherwise, false.</returns>
-    bool IsMovingTowards(int floor, Direction requiredDirection);
+    /// <param name="floor">The floor to check.</param>
+    /// <param name="requiredDirection">The direction required.</param>
+    /// <returns>True if moving towards the floor in the required direction; otherwise, false.</returns>
+    bool IsMovingTowards(int floor,Direction requiredDirection);
 
     /// <summary>
-    /// Simulates one step of elevator operation.
+    /// Advances the elevator by one step in its operation.
     /// </summary>
     void Step();
 
@@ -97,21 +95,23 @@ public interface IElevator
     string ToString();
 
     /// <summary>
-    /// Removes passengers destined for the current floor.
+    /// Unloads passengers whose destination is the current floor.
     /// </summary>
     void UnloadPassengers();
 }
 
 /// <summary>
-/// Represents a single elevator in the building.
+/// Represents an elevator in the building, managing its state, passengers, and movement.
 /// </summary>
 public class Elevator : IElevator
 {
     private readonly ILogger<Elevator> _logger;
-    private SortedSet<int> _passengerDropOffFloors = new SortedSet<int>();
+    private static int _nextId = 1;
 
-    // Stores tuples of (floorNumber, directionOfCall) for pickups assigned by the Building
-    private List<(int Floor, Direction CallDirection)> _assignedPickups = new List<(int, Direction)>();
+    // --- Consolidated and Primary State Fields ---
+    private readonly SortedSet<int> _passengerDropOffFloors = new SortedSet<int>();
+    private readonly List<(int Floor, Direction CallDirection)> _assignedPickups = new List<(int Floor, Direction CallDirection)>();
+    private Direction _previousTravelDirection = Direction.Stopped;
 
     /// <summary>
     /// Gets the unique identifier for this elevator instance.
@@ -119,281 +119,362 @@ public class Elevator : IElevator
     public int Id { get; }
 
     /// <summary>
-    /// Gets the current floor where the elevator is located.
+    /// Gets or sets the current floor where the elevator is located.
     /// </summary>
     public int CurrentFloor { get; internal set; }
 
     /// <summary>
-    /// Gets the current direction of travel for the elevator (Up, Down, or Stopped).
+    /// Gets or sets the current direction of the elevator.
     /// </summary>
     public Direction CurrentDirection { get; internal set; }
 
     /// <summary>
-    /// Gets the current operational state of the elevator (e.g., Moving, Stopped, DoorsOpen, OutOfService).
+    /// Gets or sets the current operational state of the elevator.
     /// </summary>
     public ElevatorState State { get; internal set; }
 
     /// <summary>
-    /// Gets the list of people currently riding in the elevator.
+    /// Gets the list of passengers currently in the elevator.
     /// </summary>
     public List<Person> Passengers { get; }
 
-    // IElevator property implementation
     /// <summary>
-    /// Gets a collection of all upcoming stops for the elevator, including both passenger drop-off floors  and assigned
-    /// pickup floors, sorted in ascending order.
+    /// Gets the maximum number of passengers the elevator can carry.
+    /// </summary>
+    public int MaxCapacity { get; }
+
+    /// <summary>
+    /// Gets a read-only collection of all upcoming stops for the elevator.
     /// </summary>
     public IReadOnlyCollection<int> AllUpcomingStops
     {
         get
         {
-            var allStops = new SortedSet<int>(_passengerDropOffFloors); // Start with passenger destinations
+            var allStops = new SortedSet<int>(_passengerDropOffFloors);
             foreach (var pickup in _assignedPickups)
             {
-                allStops.Add(pickup.Floor); // Add pickup floors
+                allStops.Add(pickup.Floor);
             }
-            return allStops; // SortedSet itself implements IReadOnlyCollection<int>
+            return allStops;
         }
     }
 
     /// <summary>
-    /// Gets the maximum number of people the elevator can carry at one time.
-    /// </summary>
-    public int MaxCapacity { get; }
-
-    // Stores floors this elevator is requested to visit (both for pickups and drop-offs)
-    // Using a SortedSet helps in efficiently determining the next stop.
-    private SortedSet<int> _destinationFloors;
-    // For pickups, we also need to know the direction of the call
-    private List<Tuple<int, Direction>> _pickupRequests;
-    /// Static counter to assign unique IDs to elevators
-    private static int _nextId = 1;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Elevator"/> class with a unique identifier,
-    /// a specified starting floor, and a maximum passenger capacity.
-    /// The elevator is initialized in the stopped state with no passengers and no pending destinations.
+    /// Initializes a new instance of the <see cref="Elevator"/> class.
     /// </summary>
     /// <param name="logger">The logger instance for this elevator.</param>
-    /// <param name="startingFloor">The floor where the elevator will be initially positioned. Defaults to 1 if not specified.</param>
-    /// <param name="maxCapacity">The maximum number of people the elevator can carry at one time. Defaults to 10 if not specified.</param>
-    public Elevator(ILogger<Elevator> logger, int startingFloor = 1, int maxCapacity = 10)
+    /// <param name="startingFloor">The floor where the elevator starts. Defaults to 1.</param>
+    /// <param name="maxCapacity">The maximum number of passengers. Defaults to 10.</param>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="logger"/> is null.</exception>
+    public Elevator(ILogger<Elevator> logger,int startingFloor = 1,int maxCapacity = 10)
     {
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger), "Logger cannot be null.");
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger),"Logger cannot be null.");
         Id = _nextId++;
         CurrentFloor = startingFloor;
         CurrentDirection = Direction.Stopped;
         State = ElevatorState.Stopped;
         Passengers = new List<Person>();
         MaxCapacity = maxCapacity;
-        _destinationFloors = new SortedSet<int>();
-        _pickupRequests = new List<Tuple<int, Direction>>();
-        _logger = logger;
+        _logger.LogInformation("Elevator E{ElevatorId} created at F{StartingFloor}, Capacity: {MaxCapacity}.",Id,startingFloor,maxCapacity);
     }
 
     /// <summary>
-    /// Moves the elevator one floor in its current direction.
-    /// Updates CurrentFloor and handles arrival at a destination.
+    /// Adds a destination floor or pickup request to the elevator's list of stops.
     /// </summary>
-    private void Move()
+    /// <param name="floor">The floor to add as a destination or pickup.</param>
+    /// <param name="callDirection">The direction of the call, if applicable.</param>
+    public void AddDestination(int floor,Direction callDirection = Direction.Stopped)
     {
-        try
+        bool changed = false;
+        if (callDirection == Direction.Up || callDirection == Direction.Down)
         {
-            if (State != ElevatorState.Moving)
-                return;
-
-            // Determine primary target floor (could be a drop-off or a pickup)
-            int? targetFloor = GetNextTargetFloor();
-
-            if (!targetFloor.HasValue)
+            if (!_assignedPickups.Any(r => r.Floor == floor && r.CallDirection == callDirection))
             {
-                // No destinations, should become idle.
-                // This case should ideally be caught before calling Move by Step()
-                CurrentDirection = Direction.Stopped;
-                State = ElevatorState.Stopped;
-                Console.WriteLine($"Elevator {Id}: No target floor. Becoming Idle at {CurrentFloor}.");
-                return;
+                _assignedPickups.Add((floor, callDirection));
+                changed = true;
+                _logger.LogInformation("E{Id}: Pickup request added for F{Floor} ({CallDirection}). AssignedPickups: [{Pickups}]",
+                    Id,floor,callDirection,string.Join(";",_assignedPickups.Select(r => $"F{r.Floor}-{r.CallDirection}")));
             }
-
-            // Set direction based on the first target floor
-            if (targetFloor.Value > CurrentFloor)
-                CurrentDirection = Direction.Up;
-            else if (targetFloor.Value < CurrentFloor)
-                CurrentDirection = Direction.Down;
-            else // Already at the target floor
+        }
+        else
+        {
+            if (_passengerDropOffFloors.Add(floor))
             {
-                ArriveAtFloor(targetFloor.Value);
-                return;
+                changed = true;
+                _logger.LogInformation("E{Id}: General destination F{Floor} added to passenger drop-off list. DropOffs: [{Dests}]",
+                    Id,floor,string.Join(",",_passengerDropOffFloors));
             }
-
-            // Actually move
-            if (CurrentDirection == Direction.Up)
-                CurrentFloor++;
-            else if (CurrentDirection == Direction.Down)
-                CurrentFloor--;
-
-            Console.WriteLine($"Elevator {Id}: Moving {CurrentDirection} to floor {CurrentFloor}. Target: {targetFloor.Value}");
-
-            // Check if arrived at any destination floor (pickup or drop-off)
-            if (ShouldStopAt(CurrentFloor))
-            {
-                ArriveAtFloor(CurrentFloor);
-            }
-
         }
-        catch (Exception ex)
+
+        if (changed && (State == ElevatorState.Stopped || CurrentDirection == Direction.Stopped))
         {
-            _logger.LogError(ex, $"Elevator: {Id} Error during Move operation.");
-            throw;
+            _logger.LogDebug("E{Id}: Destination added while potentially idle. Step() will re-evaluate.",Id);
         }
-    }
-    private bool ShouldStopAt(int floor)
-    {
-        try
-        {
-            // Stop if it's a passenger's destination
-            if (Passengers.Any(p => p.DestinationFloor == floor))
-                return true;
-            // Stop if it's a pickup request in the current direction of travel
-            if (_pickupRequests.Any(req => req.Item1 == floor && (req.Item2 == CurrentDirection || CurrentDirection == Direction.Stopped)))
-                return true;
-            // Stop if it's a destination floor explicitly added (e.g. someone inside pressed a button)
-            if (_destinationFloors.Contains(floor))
-                return true;
-
-            return false;
-
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, $"Elevator: {Id} Error during ShouldStopAt.");
-            throw;
-        }
-    }
-
-    private void ArriveAtFloor(int floor)
-    {
-        Console.WriteLine($"Elevator {Id}: Arrived at floor {floor}. Opening doors.");
-        CurrentFloor = floor; // Ensure current floor is set correctly
-        State = ElevatorState.DoorsOpen;
-
-        // Remove this floor from general destinations and specific pickup requests
-        _destinationFloors.Remove(floor);
-        _pickupRequests.RemoveAll(req => req.Item1 == floor);
-
-        // Actual loading/unloading logic will be called here or in Step()
-        // For now, just log. Unload is handled by Step() before Move()
     }
 
     /// <summary>
-    /// Gets the next logical target floor based on current direction and requests.
-    /// This is a simplified version. A more advanced one would prioritize.
+    /// Attempts to add a passenger to the elevator.
     /// </summary>
-    private int? GetNextTargetFloor()
-    {
-        if (CurrentDirection == Direction.Up)
-        {
-            // Prefer current direction destinations or pickups
-            int? nextUp = _destinationFloors.FirstOrDefault(f => f > CurrentFloor);
-            int? nextPickupUp = _pickupRequests.Where(r => r.Item1 > CurrentFloor && r.Item2 == Direction.Up)
-                                             .OrderBy(r => r.Item1).Select(r => (int?)r.Item1).FirstOrDefault();
-            if (nextUp.HasValue && (!nextPickupUp.HasValue || nextUp.Value <= nextPickupUp.Value))
-                return nextUp.Value;
-            if (nextPickupUp.HasValue)
-                return nextPickupUp.Value;
-            // If no more up requests, check for any other requests (could be down or already passed)
-            return _destinationFloors.Min(); // Or _pickupRequests.Select(r=>r.Item1).Min();
-        }
-        if (CurrentDirection == Direction.Down)
-        {
-            // Prefer current direction destinations or pickups
-            int? nextDown = _destinationFloors.LastOrDefault(f => f < CurrentFloor);
-            int? nextPickupDown = _pickupRequests.Where(r => r.Item1 < CurrentFloor && r.Item2 == Direction.Down)
-                                             .OrderByDescending(r => r.Item1).Select(r => (int?)r.Item1).FirstOrDefault();
-
-            if (nextDown.HasValue && nextDown.Value != 0 && (!nextPickupDown.HasValue || nextDown.Value >= nextPickupDown.Value))
-                return nextDown.Value; // Check for 0 if floors are 1-indexed
-            if (nextPickupDown.HasValue)
-                return nextPickupDown.Value;
-
-            return _destinationFloors.Max(); // Or _pickupRequests.Select(r=>r.Item1).Max();
-        }
-        // If Idle, pick the closest or first available request.
-        if (_destinationFloors.Any())
-            return _destinationFloors.First();
-        if (_pickupRequests.Any())
-            return _pickupRequests.First().Item1;
-
-        return null;
-    }
-
-    /// <summary>
-    /// Adds a passenger if capacity allows.
-    /// </summary>
-    /// <param name="person">The person to add as a passenger.</param>
+    /// <param name="person">The person to add.</param>
     /// <returns>True if the passenger was added; otherwise, false.</returns>
     public bool AddPassenger(Person person)
     {
         if (Passengers.Count < MaxCapacity)
         {
             Passengers.Add(person);
-            _destinationFloors.Add(person.DestinationFloor); // Add person's destination
-            Console.WriteLine($"Elevator {Id}: {person} boarded at floor {CurrentFloor}. Passengers: {Passengers.Count}/{MaxCapacity}.");
+            _passengerDropOffFloors.Add(person.DestinationFloor);
+            _logger.LogInformation("E{Id}: P{PersonId} (O:{OriginFloor}->D:{DestFloor}) boarded at F{CurrentFloor}. Pax: {PaxCount}/{MaxCap}. DropOffs: [{DropOffs}]",
+                Id,person.Id,person.OriginFloor,person.DestinationFloor,CurrentFloor,Passengers.Count,MaxCapacity,string.Join(",",_passengerDropOffFloors));
             return true;
         }
-        Console.WriteLine($"Elevator {Id}: Full. Cannot board {person} at floor {CurrentFloor}. Passengers: {Passengers.Count}/{MaxCapacity}.");
+        _logger.LogWarning("E{Id}: Cannot board P{PersonId} at F{CurrentFloor}. Capacity full ({PaxCount}/{MaxCap}).",
+            Id,person.Id,CurrentFloor,Passengers.Count,MaxCapacity);
         return false;
     }
 
-    /// <summary>
-    /// Adds a floor to the elevator's destination list (e.g., internal button press or assigned call).
-    /// </summary>
-    /// <param name="floor">The floor to add as a destination.</param>
-    /// <param name="callDirection">The direction of the call, used for pickups. Defaults to Stopped.</param>
-    public void AddDestination(int floor, Direction callDirection = Direction.Stopped)
+    private void ArriveAtFloor(int floor)
     {
-        _destinationFloors.Add(floor);
-        if (callDirection != Direction.Stopped) // This is a pickup request
+        _previousTravelDirection = CurrentDirection; // Capture travel direction before neutralizing
+        _logger.LogInformation("E{Id}: Arrived at F{ArrivalFloor}. Processing arrival. Travelled {PrevTravelDir}.",Id,floor,_previousTravelDirection);
+
+        CurrentFloor = floor; // Ensure CurrentFloor is accurately set
+        State = ElevatorState.DoorsOpen;
+        CurrentDirection = Direction.Stopped; // KEY CHANGE: Neutral direction for loading/idling
+        _logger.LogDebug("E{Id}: At F{ArrivalFloor}, State set to DoorsOpen, Direction set to Stopped.",Id,floor);
+
+        // Clear the specific *pickup* request that was serviced to reach this floor, if any.
+        // Match based on floor and the direction the elevator was traveling to fulfill the pickup.
+        var servicedPickup = _assignedPickups.FirstOrDefault(p => p.Floor == floor && p.CallDirection == _previousTravelDirection);
+        if (servicedPickup != default)
         {
-            if (!_pickupRequests.Any(r => r.Item1 == floor && r.Item2 == callDirection))
+            _assignedPickups.Remove(servicedPickup);
+            _logger.LogInformation("E{Id}: Serviced and removed pickup {PickupDirection} request for F{Floor}. Pickups left: {PickupCount}",
+                Id,servicedPickup.CallDirection,floor,_assignedPickups.Count);
+        }
+        else
+        {
+            // If no specific directional pickup matched, check if ANY pickup was for this floor.
+            // This might happen if elevator was idle and picked this floor as closest target.
+            int removedCount = _assignedPickups.RemoveAll(p => p.Floor == floor);
+            if (removedCount > 0)
             {
-                _pickupRequests.Add(Tuple.Create(floor, callDirection));
+                _logger.LogInformation("E{Id}: Serviced and removed {RemovedCount} general pickup request(s) for F{Floor} as arrival context didn't match specific one.",Id,removedCount,floor);
             }
         }
+        // UnloadPassengers will be called by Step() next, and it will handle _passengerDropOffFloors.
+    }
 
-        // If idle, set initial direction towards this new destination
-        if (State == ElevatorState.Stopped && CurrentDirection == Direction.Stopped)
+    public void UnloadPassengers()
+    {
+        if (State != ElevatorState.DoorsOpen)
         {
-            if (floor > CurrentFloor)
-                CurrentDirection = Direction.Up;
-            else if (floor < CurrentFloor)
-                CurrentDirection = Direction.Down;
-            // If floor == CurrentFloor, it should open doors (handled by Step)
-            State = ElevatorState.Moving; // Will immediately check if it needs to stop or move
+            return;
         }
-        Console.WriteLine($"Elevator {Id}: Destination {floor} (Dir: {callDirection}) added. Current destinations: {string.Join(", ", _destinationFloors)} Pickups: {string.Join(", ", _pickupRequests.Select(r => $"F{r.Item1}-{r.Item2}"))}");
+
+        var arrivedPassengers = Passengers.Where(p => p.DestinationFloor == CurrentFloor).ToList();
+        if (arrivedPassengers.Any())
+        {
+            _logger.LogInformation("E{Id}: Unloading {PaxCount} passengers at F{CurrentFloor}.",Id,arrivedPassengers.Count,CurrentFloor);
+            foreach (var person in arrivedPassengers)
+            {
+                Passengers.Remove(person);
+            }
+
+            if (!Passengers.Any(p => p.DestinationFloor == CurrentFloor))
+            {
+                if (_passengerDropOffFloors.Remove(CurrentFloor))
+                {
+                    _logger.LogInformation("E{Id}: F{CurrentFloor} removed from passenger drop-off list. DropOffs: [{Dests}]",Id,CurrentFloor,string.Join(",",_passengerDropOffFloors));
+                }
+            }
+        }
     }
 
     /// <summary>
-    /// Determines whether the elevator is currently idle (not moving and not handling any requests).
+    /// Advances the elevator by one step in its operation, handling movement, stops, and passenger unloading.
     /// </summary>
-    /// <returns>True if the elevator is idle; otherwise, false.</returns>
-    public bool IsIdle() => State == ElevatorState.Stopped;
-
-    /// <summary>
-    /// Determines whether the elevator is moving towards the specified floor in the required direction.
-    /// </summary>
-    /// <param name="floor">The floor to check if the elevator is moving towards.</param>
-    /// <param name="requiredDirection">The direction in which the elevator should be moving.</param>
-    /// <returns>True if the elevator is moving in the required direction and towards the specified floor; otherwise, false.</returns>
-    public bool IsMovingTowards(int floor, Direction requiredDirection)
+    public void Step()
     {
-        if (State == ElevatorState.Moving)
+        try
         {
-            if (CurrentDirection == Direction.Up && requiredDirection == Direction.Up && floor >= CurrentFloor)
-                return true;
-            if (CurrentDirection == Direction.Down && requiredDirection == Direction.Down && floor <= CurrentFloor)
-                return true;
+            _logger.LogTrace("E{Id}: Step BEGIN. F{CurrentFloor}, St:{State}, Dir:{CurrentDir}, Pax:{PaxCount}, AllStops:[{AllStops}]",
+                Id,CurrentFloor,State,CurrentDirection,Passengers.Count,string.Join(",",AllUpcomingStops));
+
+            if (State == ElevatorState.DoorsOpen)
+            {
+                UnloadPassengers();
+                _logger.LogInformation("E{Id}: Doors were open at F{CurrentFloor}. Closing doors.",Id,CurrentFloor);
+                State = ElevatorState.Stopped;
+            }
+
+            int? nextTarget = DetermineNextLogicalStop();
+
+            if (nextTarget.HasValue)
+            {
+                if (CurrentFloor == nextTarget.Value)
+                {
+                    if (State != ElevatorState.DoorsOpen)
+                    {
+                        _logger.LogInformation("E{Id}: At target F{CurrentFloor} with doors closed. Opening doors.",Id,CurrentFloor);
+                        ArriveAtFloor(CurrentFloor);
+                    }
+                }
+                else
+                {
+                    _previousTravelDirection = (nextTarget.Value > CurrentFloor) ? Direction.Up : Direction.Down;
+                    State = ElevatorState.Moving;
+                    MoveTowards(nextTarget.Value);
+                }
+            }
+            else
+            {
+                if (State == ElevatorState.Moving)
+                {
+                    _logger.LogInformation("E{Id}: Was moving, but no more stops. Becoming Stopped at F{CurrentFloor}.",Id,CurrentFloor);
+                }
+                State = ElevatorState.Stopped;
+                CurrentDirection = Direction.Stopped;
+                _previousTravelDirection = Direction.Stopped;
+            }
+            _logger.LogTrace("E{Id}: Step END. F{CurrentFloor}, St:{State}, Dir:{CurrentDir}",Id,CurrentFloor,State,CurrentDirection);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,"E{Id}: Error during Step operation.",Id);
+            State = ElevatorState.OutOfService;
+            CurrentDirection = Direction.Stopped;
+        }
+    }
+
+    private void MoveTowards(int targetFloor)
+    {
+        if (State != ElevatorState.Moving)
+        {
+            _logger.LogTrace("E{Id}: MoveTowards called but State is not Moving ({CurrentState}). Setting to Moving.",Id,State);
+            State = ElevatorState.Moving; // Ensure it's set if Step logic determined a move.
+        }
+
+        if (CurrentFloor < targetFloor)
+        {
+            CurrentDirection = Direction.Up; // Travel direction
+            CurrentFloor++;
+            _logger.LogInformation("E{Id}: Moving {CurrentDirection} to F{CurrentFloor}. Overall Target: F{TargetFloor}",Id,CurrentDirection,CurrentFloor,targetFloor);
+        }
+        else if (CurrentFloor > targetFloor)
+        {
+            CurrentDirection = Direction.Down; // Travel direction
+            CurrentFloor--;
+            _logger.LogInformation("E{Id}: Moving {CurrentDirection} to F{CurrentFloor}. Overall Target: F{TargetFloor}",Id,CurrentDirection,CurrentFloor,targetFloor);
+        }
+
+        // After moving one floor, check if this new CurrentFloor is a required stop
+        if (ShouldStopAt(CurrentFloor)) // Pass CurrentFloor after move
+        {
+            ArriveAtFloor(CurrentFloor); // This will open doors and set CurrentDirection to Stopped
+        }
+    }
+
+    private bool ShouldStopAt(int floor) // Now uses consolidated lists
+    {
+        if (_passengerDropOffFloors.Contains(floor)) // Is it a drop-off for a current passenger?
+            return true;
+
+        // Is it an assigned pickup, and are we in a state/direction to service it?
+        // CurrentDirection here is the *travel direction*.
+        if (_assignedPickups.Any(req => req.Floor == floor &&
+                                      (req.CallDirection == CurrentDirection || CurrentDirection == Direction.Stopped))) // Simpler check: stop if it's a pickup for this floor matching travel dir, or if we are stopped and it's a call
+            return true;
+
+        // If moving, and a pickup is at this floor for the *opposite* direction,
+        // we generally wouldn't stop unless it's the only call or other complex logic.
+        // For now, this ShouldStopAt is simpler. DetermineNextLogicalStop is smarter.
+        // This method primarily answers: if I land on this floor, is it one of my active targets?
+        return AllUpcomingStops.Contains(floor); // General catch-all: if it's in any list of stops.
+    }
+
+    private int? DetermineNextLogicalStop() // - This logic is good.
+    {
+        var allStops = AllUpcomingStops;
+        if (!allStops.Any()) return null;
+
+        Direction evalDirection = CurrentDirection;
+        // If currently stopped, but was previously moving, try to continue that direction first if appropriate.
+        if (evalDirection == Direction.Stopped && _previousTravelDirection != Direction.Stopped)
+        {
+            evalDirection = _previousTravelDirection;
+        }
+
+        int currentEvalFloor = CurrentFloor;
+
+        if (evalDirection == Direction.Up)
+        {
+            var upcomingUpStops = allStops.Where(f => f >= currentEvalFloor).OrderBy(f => f).ToList();
+            if (upcomingUpStops.Any())
+            {
+                // If current floor is a stop and elevator is heading up or was just stopped here from an up journey.
+                if (upcomingUpStops.First() == currentEvalFloor) return currentEvalFloor;
+                // Next stop strictly greater than current floor.
+                return upcomingUpStops.FirstOrDefault(f => f > currentEvalFloor);
+            }
+            // No more UP stops in the current path, look for any stops below to reverse towards (highest one).
+            return allStops.Any() ? allStops.Where(f => f < currentEvalFloor).OrderByDescending(f => f).FirstOrDefault() : null;
+        }
+        else if (evalDirection == Direction.Down)
+        {
+            var upcomingDownStops = allStops.Where(f => f <= currentEvalFloor).OrderByDescending(f => f).ToList();
+            if (upcomingDownStops.Any())
+            {
+                if (upcomingDownStops.First() == currentEvalFloor) return currentEvalFloor;
+                return upcomingDownStops.FirstOrDefault(f => f < currentEvalFloor);
+            }
+            // No more DOWN stops, look for any stops above to reverse towards (lowest one).
+            return allStops.Any() ? allStops.Where(f => f > currentEvalFloor).OrderBy(f => f).FirstOrDefault() : null;
+        }
+        else // CurrentDirection is Stopped (and _previousTravelDirection was also Stopped, or no prev direction)
+        {
+            if (!allStops.Any()) return null;
+            // Find the closest stop.
+            return allStops.OrderBy(f => Math.Abs(f - currentEvalFloor))
+                           .ThenBy(f => f)
+                           .FirstOrDefault();
+        }
+    }
+
+    // RecalculateNextStopAndDirection is mostly superseded by Step's direct use of DetermineNextLogicalStop
+    // It was for nudging an idle elevator. AddPassenger/AddDestination might call this if elevator is Stopped.
+    private void RecalculateNextStopAndDirection(bool attemptToSetMoving) //
+    {
+        if (State == ElevatorState.Stopped && CurrentDirection == Direction.Stopped)
+        {
+            int? nextStop = DetermineNextLogicalStop();
+            if (nextStop.HasValue && attemptToSetMoving)
+            {
+                if (nextStop.Value == CurrentFloor)
+                {
+                    _logger.LogDebug("E{Id}: Recalculated. Target is current F{CurrentFloor}. Step() will handle opening doors.",Id,CurrentFloor);
+                    // Step() will call ArriveAtFloor if doors aren't open
+                }
+                else
+                {
+                    // Let Step() handle the transition to Moving state and setting CurrentDirection
+                    _logger.LogDebug("E{Id}: Recalculated. New target is F{NextStop}. Step() will initiate movement.",Id,nextStop.Value);
+                }
+            }
+            else if (!nextStop.HasValue)
+            {
+                _logger.LogDebug("E{Id}: Recalculated. No upcoming stops. Remains Stopped.",Id);
+            }
+        }
+    }
+
+    public bool IsStopped() => State == ElevatorState.Stopped && CurrentDirection == Direction.Stopped; // [cite: 133]
+
+    public bool IsMovingTowards(int floor,Direction requiredDirection) //
+    {
+        if (State == ElevatorState.Moving && CurrentDirection == requiredDirection)
+        {
+            return (requiredDirection == Direction.Up && floor >= CurrentFloor) ||
+                   (requiredDirection == Direction.Down && floor <= CurrentFloor);
         }
         return false;
     }
@@ -401,205 +482,19 @@ public class Elevator : IElevator
     /// <summary>
     /// Gets the number of pickup requests at the specified floor.
     /// </summary>
-    /// <param name="floor">The floor for which to count pickup requests.</param>
-    /// <returns>The number of pickup requests at the given floor.</returns>
+    /// <param name="floor">The floor to check for pickup requests.</param>
+    /// <returns>The number of pickup requests at the floor.</returns>
     public int GetPickupRequestCountAtFloor(int floor)
     {
-        return _pickupRequests.Count(pr => pr.Item1 == floor);
+        return _assignedPickups.Count(pr => pr.Floor == floor);
     }
 
     /// <summary>
-    /// Returns a string that represents the current state of the elevator, including its floor, direction, state, passenger count, stops, and pickup requests.
+    /// Returns a string that represents the current state of the elevator.
     /// </summary>
     /// <returns>A string representation of the elevator's current status.</returns>
     public override string ToString()
     {
-        return $"Elevator {Id}: Floor {CurrentFloor}, Dir: {CurrentDirection}, State: {State}, People: {Passengers.Count}/{MaxCapacity}, Stops: [{string.Join(",", _destinationFloors)}], Pickups: [{string.Join(", ", _pickupRequests.Select(r => $"F{r.Item1}({r.Item2.ToString().First()})"))}]";
+        return $"Elevator E{Id}: F{CurrentFloor}, Dir:{CurrentDirection}, St:{State}, Pax:{Passengers.Count}/{MaxCapacity}, Stops:[{string.Join(",",AllUpcomingStops)}]";
     }
-    // This method needs to be implemented carefully. It's the core of the elevator's movement logic.
-    private void RecalculateNextStopAndDirection()
-    {
-        // If doors open, don't change mind yet
-        if (State == ElevatorState.DoorsOpen) return;
-
-        int? nextStop = DetermineNextLogicalStop(); // This method will use AllUpcomingStops or the individual lists
-
-        if (nextStop.HasValue)
-        {
-            if (CurrentFloor == nextStop.Value)
-            {
-                // Already at a target stop. Step() should handle opening doors if needed.
-                // Direction might become Idle or stay if continuing after pickup.
-                // For simplicity, if at target, mark as Idle for now, Step() refines.
-                // CurrentDirection = DetermineDirectionAfterStop(nextStop.Value); // More complex
-            }
-            else if (nextStop.Value > CurrentFloor)
-            {
-                //CurrentDirection = Direction.Up;
-                //State = ElevatorState.Moving;
-            }
-            else // nextStop.Value < CurrentFloor
-            {
-                //CurrentDirection = Direction.Down;
-                //State = ElevatorState.Moving;
-            }
-            _logger.LogTrace("E{Id}: Recalculated. Next target stop is F{NextStop}. CurrentDir: {CurrentDir}, State: {State}",
-               Id,nextStop,CurrentDirection,State);
-        }
-        else
-        {
-            // No more stops (neither drop-offs nor pickups)
-            //CurrentDirection = Direction.Idle;
-            //State = ElevatorState.Idle;
-            _logger.LogTrace("E{Id}: Recalculated. No upcoming stops. Becoming Idle.",Id);
-        }
-        // The actual setting of CurrentDirection and State should ideally happen in Step()
-        // based on the outcome of DetermineNextLogicalStop() and current state.
-        // RecalculateNextStopAndDirection primarily finds the *next target*.
-    }
-
-    // This is the critical logic.
-    private int? DetermineNextLogicalStop()
-    {
-        var allStops = AllUpcomingStops; // Use the combined list for decision making
-        if (!allStops.Any()) return null;
-
-        // --- "Look-ahead" or "SCAN" like algorithm ---
-        // 1. Continue in CurrentDirection if there are stops (pickups or drop-offs) in that direction.
-        // 2. If no stops in current direction, but stops exist in opposite direction, prepare to change.
-        // 3. If Idle, pick best target.
-
-        IEnumerable<int> potentialStops;
-
-        if (CurrentDirection == Direction.Up)
-        {
-            potentialStops = allStops.Where(f => f >= CurrentFloor).OrderBy(f => f);
-            if (potentialStops.Any())
-            {
-                // If current floor is a stop, service it first.
-                if (potentialStops.First() == CurrentFloor && (_passengerDropOffFloors.Contains(CurrentFloor) || _assignedPickups.Any(p => p.Floor == CurrentFloor && p.CallDirection == Direction.Up)))
-                {
-                    return CurrentFloor;
-                }
-                // Else, next stop upwards
-                return potentialStops.Where(f => f > CurrentFloor).FirstOrDefault();
-            }
-            // No more stops upwards or at current floor, look for any stops downwards (take the highest one to reverse towards)
-            return allStops.OrderByDescending(f => f).FirstOrDefault(); // Pick highest overall if reversing
-        }
-        else if (CurrentDirection == Direction.Down)
-        {
-            potentialStops = allStops.Where(f => f <= CurrentFloor).OrderByDescending(f => f);
-            if (potentialStops.Any())
-            {
-                if (potentialStops.First() == CurrentFloor && (_passengerDropOffFloors.Contains(CurrentFloor) || _assignedPickups.Any(p => p.Floor == CurrentFloor && p.CallDirection == Direction.Down)))
-                {
-                    return CurrentFloor;
-                }
-                return potentialStops.Where(f => f < CurrentFloor).FirstOrDefault();
-            }
-            // No more stops downwards, look for any stops upwards (take the lowest one to reverse towards)
-            return allStops.OrderBy(f => f).FirstOrDefault(); // Pick lowest overall if reversing
-        }
-        else // CurrentDirection is Idle (or Stopped)
-        {
-            // Find the closest stop among all upcoming stops
-            if (!allStops.Any()) return null;
-            return allStops.OrderBy(f => Math.Abs(f - CurrentFloor)).ThenBy(f => f).First(); // ThenBy to prefer lower floors in case of tie in distance
-        }
-    }
-
-    // ToDo: Tidy this up and ensure it fits the overall logic.
-    // Other IElevator methods (Step, UnloadPassengers, etc.) would use these internal lists.
-    // Example:
-    /// <summary>
-    /// Unloads passengers from the elevator who have reached their destination floor.
-    /// </summary>
-    /// <remarks>This method removes passengers whose <see cref="Person.DestinationFloor"/> matches the elevator's
-    /// current floor. If all passengers for the current floor are unloaded, the floor is removed from the list of
-    /// drop-off destinations. The method also recalculates the next stop and direction for the elevator after unloading
-    /// passengers.</remarks>
-    public void UnloadPassengers()
-    {
-        // Only unload if doors are open or should be opening (logic in Step will manage State)
-        // if (State != ElevatorState.DoorsOpen) return;
-
-        var arrivedPassengers = Passengers.Where(p => p.DestinationFloor == CurrentFloor).ToList();
-        if (arrivedPassengers.Any())
-        {
-            _logger.LogInformation($"Elevator {Id}: Unloading {arrivedPassengers.Count} passengers at Floor {CurrentFloor}.");
-            foreach (var person in arrivedPassengers)
-            {
-                Passengers.Remove(person);
-                // No need to remove from _passengerDropOffFloors here if we re-evaluate stops.
-                // However, it's cleaner to remove it once serviced for that specific instance of travel.
-                // But if another passenger for the same floor boards later, it needs to be re-added.
-                // Let's assume _passengerDropOffFloors tracks *currently desired* drop-offs.
-            }
-            // Once all passengers for this floor are off, that floor MIGHT no longer be a drop-off destination
-            // unless another passenger currently in the elevator is also going there (unlikely if we remove all).
-            if (!Passengers.Any(p => p.DestinationFloor == CurrentFloor))
-            {
-                _passengerDropOffFloors.Remove(CurrentFloor);
-                _logger.LogDebug("E{Id}: F{CurrentFloor} removed from passenger drop-off destinations. DropOffs: [{Dests}]",Id,CurrentFloor,string.Join(",",_passengerDropOffFloors));
-            }
-            RecalculateNextStopAndDirection();
-        }
-    }
-
-    /// <summary>
-    /// Primary method to simulate one step of elevator operation.
-    /// This will involve moving, opening/closing doors, loading/unloading passengers.
-    /// </summary>
-    public void Step()
-    {
-        try
-        {
-            // 1. Handle Doors (Open/Close based on State)
-            if (State == ElevatorState.DoorsOpen)
-            {
-                // Simulate door open duration or immediately close if done
-                Console.WriteLine($"Elevator {Id}: Doors closing at floor {CurrentFloor}.");
-                _logger.LogInformation($"Elevator {Id}: Doors closing at floor {CurrentFloor}.");
-                State = ElevatorState.Stopped; // Or Moving if it has next destination
-                                               // Actual passenger loading/unloading would happen before closing
-            }
-
-            // 2. Unload Passengers if at their destination floor
-            UnloadPassengers();
-
-            // 3. Load Passengers if stopped at a floor with requests matching direction
-            // This would typically be triggered by the Building/Controller
-            // For now, we assume it's handled externally or after deciding to stop.
-
-            // 4. Determine Next Action (Move or become Idle)
-            if (_destinationFloors.Any() || _pickupRequests.Any())
-            {
-                if (State != ElevatorState.Moving && State != ElevatorState.DoorsOpen)
-                {
-                    State = ElevatorState.Moving;
-                }
-
-                Move();
-            }
-            else
-            {
-                if (State == ElevatorState.Moving) // If it was moving but no more destinations
-                {
-                    Console.WriteLine($"Elevator {Id}: Reached final destination or cleared requests. Becoming Idle at floor {CurrentFloor}.");
-                    _logger.LogInformation($"Elevator {Id}: Reached final destination or cleared requests. Becoming Idle at floor {CurrentFloor}.");
-                }
-                State = ElevatorState.Stopped;
-                CurrentDirection = Direction.Stopped;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,$"Elevator {Id}: Error during Step operation.");
-            Console.WriteLine($"Elevator {Id}: Error during Step operation: {ex.Message}");
-            State = ElevatorState.OutOfService; // Set to a non-operational state
-        }
-    }
-
 }
-

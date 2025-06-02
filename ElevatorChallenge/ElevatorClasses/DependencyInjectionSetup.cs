@@ -56,7 +56,8 @@ public static class DependencyInjectionSetup
         {
             var logger = provider.GetRequiredService<ILogger<FloorFactory>>();
             var floorLogger = provider.GetRequiredService<ILogger<Floor>>();
-            return new FloorFactory(logger, floorLogger, configuration);
+            var configurationWrapper = provider.GetRequiredService<IConfigurationWrapper>();
+            return new FloorFactory(logger, floorLogger,configurationWrapper);
         });
 
         // Register the Building class with its dependencies
