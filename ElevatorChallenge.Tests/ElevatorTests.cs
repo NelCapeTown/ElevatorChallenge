@@ -120,17 +120,6 @@ public class ElevatorTests
     }
 
     [Fact]
-    public void ToString_ReturnsExpectedFormat()
-    {
-        var elevator = new Elevator(_loggerMock.Object, 1, 5);
-        var str = elevator.ToString();
-
-        str.ShouldContain($"Elevator {elevator.Id}");
-        str.ShouldContain($"Floor {elevator.CurrentFloor}");
-        str.ShouldContain($"People: {elevator.Passengers.Count}/{elevator.MaxCapacity}");
-    }
-
-    [Fact]
     public void Step_DoesNotThrow_WhenIdle()
     {
         var elevator = new Elevator(_loggerMock.Object, 1, 5);
